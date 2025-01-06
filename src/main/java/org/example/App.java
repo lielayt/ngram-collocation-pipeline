@@ -41,7 +41,7 @@ public class App {
 
         // Step 1
         HadoopJarStepConfig step1 = new HadoopJarStepConfig()
-                .withJar("s3://bucket163897429777/jars/WordCount.jar")
+                .withJar("s3://bucket163897429777/jars/Ass2.jar")
                 .withMainClass("Step1");
 
         StepConfig stepConfig1 = new StepConfig()
