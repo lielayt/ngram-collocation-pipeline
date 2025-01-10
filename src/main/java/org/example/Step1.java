@@ -2,114 +2,83 @@ package org.example;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.VIntWritable;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Partitioner;
-import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import java.io.IOException;
-import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 public class Step1 {
 
+    private static class TokenizerMapper extends Mapper<LongWritable, Text, Text, Text> {
 
-    public static class MapperClass extends Mapper<LongWritable, Text, Text, IntWritable> {
-        private final static IntWritable one = new IntWritable(1);
+        private static final Pattern HEBREW_MATCHER = Pattern.compile("[\\u05D0-\\u05EA]+");
+
         @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException,  InterruptedException {
+        public void map(LongWritable lineOffset, Text record, Context context) throws IOException, InterruptedException {
+            String[] columns = record.toString().split("\t");
+            String word = columns[0];
 
-            String[] parts = value.toString().split("\t");
-
-            if(parts.length != 5)
+            if(!HEBREW_MATCHER.matcher(word).matches())
                 return;
 
+            Text wordKey = new Text(word);
+            Text occurrenceValue = new Text(columns[2]);
+            Text totalKey = new Text("*");
 
-            String ngram = parts[0];
-            String[] words = ngram.split(" ");
-            int matchCount = Integer.parseInt(parts[2]);
-            int pageCount = Integer.parseInt(parts[3]);
-            int volumeCount = Integer.parseInt(parts[4]);
-
-            //N_3
-            context.write(new Text("trigram "+words[0]+words[1]+words[2]), new IntWritable(matchCount));
-            //C_0
-            context.write(new Text("total"), new IntWritable(matchCount * 3));
-            //C_2
-            context.write(new Text("bigram "+words[0]+words[1]), new IntWritable(matchCount));
-
-
+            context.write(wordKey, occurrenceValue);
+            context.write(totalKey, occurrenceValue);
         }
     }
 
-    public static class ReducerClass extends Reducer<Text,IntWritable,Text,IntWritable> {
-        @Override
-        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException,  InterruptedException {
-            int sum = 0;
-            Text text = new Text();
-            text.set(key.toString().split(" ")[1]);
-            for (IntWritable value : values) {
-                sum += value.get();
-            }
-            context.write(text, new IntWritable(sum));
-        }
-    }
-
-    public static class PartitionerClass extends Partitioner<Text,IntWritable> {
+    private static class AggregatorReducer extends Reducer<Text, Text, Text, Text> {
 
         @Override
-        public int getPartition(Text text, IntWritable intWritable, int numOfPartitions) {
+        protected void reduce(Text word, Iterable<Text> occurrences, Context context) throws IOException, InterruptedException {
+            int totalOccurrences = 0;
 
-            String op = text.toString().split(" ")[0];
-            switch(op){
-                case "bigram":
-                    return 0;
-                case "trigram":
-                    return 1;
-                case "total":
-                    return 2;
-                default:
-                    return 0;
-
+            for (Text occurrence : occurrences) {
+                totalOccurrences += Long.parseLong(occurrence.toString());
             }
+
+            Text result = new Text(String.format("%d", totalOccurrences));
+            context.write(word, result);
         }
     }
 
+    private static class CustomPartitioner extends Partitioner<Text, Text> {
 
+        @Override
+        public int getPartition(Text key, Text value, int numberOfPartitions) {
+            return Math.abs(key.hashCode()) % numberOfPartitions;
+        }
+    }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("[DEBUG] STEP 1 started!");
-        System.out.println(args.length > 0 ? args[0] : "no args");
-        Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Word Count");
-        job.setNumReduceTasks(3);
+        System.out.println("running step 1");
+        Configuration configuration = new Configuration();
+        Job job = Job.getInstance(configuration, "Word Count Aggregator");
         job.setJarByClass(Step1.class);
-        job.setMapperClass(MapperClass.class);
-        job.setPartitionerClass(PartitionerClass.class);
-        job.setCombinerClass(ReducerClass.class);
-        job.setReducerClass(ReducerClass.class);
-        job.setMapOutputKeyClass(Text.class);
-        job.setMapOutputValueClass(IntWritable.class);
+
+        job.setMapperClass(TokenizerMapper.class);
+        job.setCombinerClass(AggregatorReducer.class);
+        job.setReducerClass(AggregatorReducer.class);
+
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
+        job.setOutputValueClass(Text.class);
+        job.setPartitionerClass(CustomPartitioner.class);
 
-//        For n_grams S3 files.
-//        Note: This is English version and you should change the path to the relevant one
-//        job.setOutputFormatClass(TextOutputFormat.class);
-//        job.setInputFormatClass(SequenceFileInputFormat.class);
-//        TextInputFormat.addInputPath(job, new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/eng-us-all/3gram/data"));
+        job.setOutputFormatClass(TextOutputFormat.class);
+        job.setInputFormatClass(SequenceFileInputFormat.class);
 
-        FileInputFormat.addInputPath(job, new Path("s3://bucket163897429777/arbix.txt"));
-        FileOutputFormat.setOutputPath(job, new Path("s3://bucket163897429777/output_word_count"));
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+        SequenceFileInputFormat.addInputPath(job, new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data"));
+        FileOutputFormat.setOutputPath(job, new Path("s3://lielaytoutputs/step1/"));
+
+        job.waitForCompletion(true);
     }
-
-
 }
