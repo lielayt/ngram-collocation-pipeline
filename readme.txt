@@ -1,8 +1,8 @@
-name: Liel Aytegev
-ID: 208490896
+name:
+ID:
 
-name: Gilad Gochman
-Id: 318477932
+name:
+Id:
 
 
 How to run:	1. upload step jars
