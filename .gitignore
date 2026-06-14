@@ -1,4 +1,12 @@
 target/
+out/
+.idea/
+*.class
+*.jar
+*.zip
+*.log
+eng_collocations.txt
+heb_collocations.txt
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
