@@ -5,6 +5,8 @@ out/
 *.jar
 *.zip
 *.log
+desktop.ini
+assignment2.pdf
 eng_collocations.txt
 heb_collocations.txt
 !.mvn/wrapper/maven-wrapper.jar

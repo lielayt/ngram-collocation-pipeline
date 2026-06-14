@@ -199,6 +199,9 @@ public class Step3 {
             double p1 = c12 / c1;
             double p2 = (c2 - c12) / (N - c1);
 
+            // log lambda compares independence against the bigram-specific association model.
+            // A more negative value means stronger evidence of collocation; -2 * log(lambda)
+            // is the equivalent positive likelihood-ratio score.
             double term1 = logL(c12, c1, p);
             double term2 = logL(c2 - c12, N - c1, p);
             double term3 = logL(c12, c1, p1);

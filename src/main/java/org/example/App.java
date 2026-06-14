@@ -34,6 +34,18 @@ public class App {
     private static final String AVAILABILITY_ZONE = envOrDefault("EMR_AVAILABILITY_ZONE", REGION + "a");
     private static final String EC2_KEY_NAME = envOrDefault("EMR_EC2_KEY_NAME", "");
     private static final int NUMBER_OF_INSTANCES = intEnvOrDefault("EMR_INSTANCE_COUNT", 4);
+    private static final String HEBREW_UNIGRAM_URI = envOrDefault(
+            "HEBREW_UNIGRAM_URI",
+            "s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data");
+    private static final String HEBREW_BIGRAM_URI = envOrDefault(
+            "HEBREW_BIGRAM_URI",
+            "s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/2gram/data");
+    private static final String ENGLISH_UNIGRAM_URI = envOrDefault(
+            "ENGLISH_UNIGRAM_URI",
+            "s3://datasets.elasticmapreduce/ngrams/books/20090715/eng-us-all/1gram/data");
+    private static final String ENGLISH_BIGRAM_URI = envOrDefault(
+            "ENGLISH_BIGRAM_URI",
+            "s3://datasets.elasticmapreduce/ngrams/books/20090715/eng-us-all/2gram/data");
 
     public static void main(String[]args) throws InterruptedException, IOException {
 
@@ -51,27 +63,19 @@ public class App {
         System.out.println( "list cluster");
         System.out.println( emr.listClusters());
 
-        String hebrewUnigram = "s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data";
-
-        String hebrewBigram = "s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/2gram/data";
-
-        String englishUnigram = "s3://datasets.elasticmapreduce/ngrams/books/20090715/eng-gb-all/1gram/data";
-
-        String englishBigram = "s3://datasets.elasticmapreduce/ngrams/books/20090715/eng-gb-all/2gram/data";
-
         //steps
 
         //step1
         HadoopJarStepConfig step1 = new HadoopJarStepConfig()
                 .withJar(PIPELINE_JAR_URI)
                 .withMainClass("org.example.Step1")
-                .withArgs(hebrewUnigram,hebrewBigram,englishUnigram,englishBigram,outputUri("step1/"),STOP_WORDS_URI);
+                .withArgs(HEBREW_UNIGRAM_URI,HEBREW_BIGRAM_URI,ENGLISH_UNIGRAM_URI,ENGLISH_BIGRAM_URI,outputUri("step1/"),STOP_WORDS_URI);
 
         //step1 only hebrew
 //        HadoopJarStepConfig step1 = new HadoopJarStepConfig()
 //                .withJar(PIPELINE_JAR_URI)
 //                .withMainClass("org.example.Step1")
-//                .withArgs(hebrewUnigram,hebrewBigram,outputUri("step1/"),STOP_WORDS_URI);
+//                .withArgs(HEBREW_UNIGRAM_URI,HEBREW_BIGRAM_URI,outputUri("step1/"),STOP_WORDS_URI);
 
         StepConfig stepConfig1 = new StepConfig()
                 .withName("step1")
@@ -129,7 +133,7 @@ public class App {
 
         System.out.println("Set steps");
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
-                .withName("Map reduce project")
+                .withName("Ngram Collocation Pipeline")
                 .withInstances(instances)
                 .withSteps(stepConfig1,stepConfig2,stepConfig3,stepConfig4)
                 .withLogUri(s3Uri(LOGS_BUCKET, "logs/"))
